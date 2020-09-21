@@ -1,6 +1,6 @@
 # WSL2 Installation Instructions
 
-For Windows 10 users that prefer Linux functionality without the speed sacrifice of a VM, Brainlit can be installed and run on WSL2.
+For Windows 10 users that prefer Linux functionality without the speed sacrifice of a Virtual Machine, Brainlit can be installed and run on WSL2.
 WSL2 is a fully functional Linux kernel that can run ELF64 binaries on a Windows Host.
 - OS Specifications: Version 1903, Build 18362 or higher
 - [Installation Instructions](https://docs.microsoft.com/en-us/windows/wsl/install-win10)

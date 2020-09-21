@@ -40,7 +40,7 @@ The repository can now be considered a "holding bay" for code developed by Neuro
 ## Installation
 
 ### Operating Systems
-Brainlit is compatible with iOS, Windows, and Unix systems.
+Brainlit is compatible with Mac, Windows, and Unix systems.
 
 #### Windows Linux Subsystem 2 
 For Windows 10 users that prefer Linux functionality without the speed sacrifice of a VM, Brainlit can be installed and run on WSL2. See installation walkthrough [here.](docs/WSL2-install-instructions.md)

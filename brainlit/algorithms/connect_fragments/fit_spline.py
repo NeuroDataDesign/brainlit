@@ -9,7 +9,8 @@ import itertools
 """
 Function definitions
 """
- 
+
+
 def checkIfDuplicates_2(listOfElems):
     """Check if given list contains any duplicates
 
@@ -21,8 +22,9 @@ def checkIfDuplicates_2(listOfElems):
         if elem in setOfElems:
             return True
         else:
-            setOfElems.add(elem)         
+            setOfElems.add(elem)
     return False
+
 
 """
 Geometric Graph class
@@ -35,12 +37,12 @@ class GeometricGraph(nx.Graph):
     Args:
         nx (Graph): A Graph stores nodes and edges with optional data, or attributes.
     """
+
     def __init__(self):
-        super(GeometricGraph,self).__init__()
+        super(GeometricGraph, self).__init__()
         self.segments = None
         self.cycle = None
         self.root = 1
-
 
     def fit_spline_tree_invariant(self):
         """construct a spline tree based on the path lengths
@@ -56,35 +58,35 @@ class GeometricGraph(nx.Graph):
         """
 
         # check repeated locations are assigned to differnet nodes
-        LOC=[]
+        LOC = []
         for noNum in list(self.nodes):
             LOC.append(np.ndarray.tolist(self.nodes[noNum]["loc"]))
 
         LOC.sort()
-        sLOC=list(LOC for LOC,_ in itertools.groupby(LOC))
+        sLOC = list(LOC for LOC, _ in itertools.groupby(LOC))
 
         if len(LOC) != len(sLOC):
             raise ValueError("Duplicate node locations are found")
 
-
-        # check if the graph is edge-covering and a tree 
-        if nx.algorithms.is_edge_cover(self,self.edges) == False:
+        # check if the graph is edge-covering and a tree
+        if nx.algorithms.is_edge_cover(self, self.edges) == False:
             raise ValueError("The graph is not edge-covering")
         elif nx.algorithms.tree.recognition.is_forest(self) == False:
             raise ValueError("The graph is not a tree for having undirected cycle(s).")
         elif nx.algorithms.tree.recognition.is_tree(self) == False:
-            raise ValueError("The geometric graph is not a tree for having disconnected segment(s).")
+            raise ValueError(
+                "The geometric graph is not a tree for having disconnected segment(s)."
+            )
 
         spline_tree = nx.DiGraph()
         curr_spline_num = 0
         stack = []
         root = self.root
         tree = nx.algorithms.traversal.depth_first_search.dfs_tree(self, source=root)
+        main_branch, collateral_branches = self.__find_main_branch(tree)
+        spline_tree.add_node(curr_spline_num, path=main_branch, starting_length=0)
 
-        path, other_trees = self.find_longest_path(tree)
-        spline_tree.add_node(curr_spline_num, path=path, starting_length=0)
-
-        for tree in other_trees:
+        for tree in collateral_branches:
             stack.append((tree, curr_spline_num))
 
         while len(stack) > 0:
@@ -93,20 +95,24 @@ class GeometricGraph(nx.Graph):
             tree = treenum[0]
             parent_num = treenum[1]
 
-            path, other_trees = self.find_longest_path(tree[0], starting_length=tree[2])
-            path.insert(0, tree[1])
+            main_branch, collateral_branches = self.__find_main_branch(
+                tree[0], starting_length=tree[2]
+            )
+            main_branch.insert(0, tree[1])
 
-            spline_tree.add_node(curr_spline_num, path=path, starting_length=tree[2])
+            spline_tree.add_node(
+                curr_spline_num, path=main_branch, starting_length=tree[2]
+            )
             spline_tree.add_edge(parent_num, curr_spline_num)
 
-            for tree in other_trees:
+            for tree in collateral_branches:
                 stack.append((tree, curr_spline_num))
 
         for node in spline_tree.nodes:
-            path = spline_tree.nodes[node]["path"]
-            
-            spline_tree.nodes[node]["spline"] = self.fit_spline_path(path)
-        
+            main_branch = spline_tree.nodes[node]["path"]
+
+            spline_tree.nodes[node]["spline"] = self.fit_spline_path(main_branch)
+
         return spline_tree
 
     def fit_spline_path(self, path):
@@ -114,7 +120,7 @@ class GeometricGraph(nx.Graph):
 
         Args:
             path (list): a list of nodes
-        
+
         Raises:
             ValueError: Nodes should be defined under loc attribute
             TypeError: loc should be of numpy.ndarray class
@@ -127,11 +133,11 @@ class GeometricGraph(nx.Graph):
 
         # check if loc is defined and of numpy.ndarray class
         for row, node in enumerate(path):
-            hasloc=self.nodes[node].get("loc")
+            hasloc = self.nodes[node].get("loc")
             if hasloc is None:
                 raise ValueError("Nodes are not defined under loc attribute")
             elif type(hasloc) is not np.ndarray:
-                raise TypeError('loc is not a numpy.ndarray')
+                raise TypeError("loc is not a numpy.ndarray")
             elif len(hasloc) != 3:
                 raise ValueError("loc is not 3-dimensional")
 
@@ -140,11 +146,14 @@ class GeometricGraph(nx.Graph):
         for row, node in enumerate(path):
             x[row, :] = self.nodes[node]["loc"]
         orig = x.shape[0]
-        x = [xi for i,xi in enumerate(x) if i==0 or (xi!=x[i-1,:]).any()]
+        x = [xi for i, xi in enumerate(x) if i == 0 or (xi != x[i - 1, :]).any()]
         x = np.stack(x, axis=0)
         new = x.shape[0]
         if orig != new:
-            warnings.warn(f'{orig-new} duplicate points removed in the trace segment', category=UserWarning)
+            warnings.warn(
+                f"{orig-new} duplicate points removed in the trace segment",
+                category=UserWarning,
+            )
         m = x.shape[0]
         diffs = np.diff(x, axis=0)
         diffs = np.linalg.norm(diffs, axis=1)
@@ -171,92 +180,117 @@ class GeometricGraph(nx.Graph):
         first = knots[0]
         last = knots[-1]
         indices_keep = (knots != first) & (knots != last)
-        knots = [i for (i,v) in zip(knots, indices_keep) if v]
+        knots = [i for (i, v) in zip(knots, indices_keep) if v]
         dup = checkIfDuplicates_2(knots)
         if dup:
             print(t)
             raise RuntimeError("Duplicates found in the above knot list")
-    
-    
-    def find_longest_path(self, tree, starting_length=0):
-        """find the longest path in a tree(Digraph)
 
-        Args:
-            tree (Digraph): directed graph
-            starting_length (int, optional): Starting length. Defaults to 0.
+    def __find_main_branch(self, tree: nx.DiGraph, starting_length: float = 0):
+        r"""Find the main branch in a directed graph.
 
-        Raises:
-            ValueError: More than one node with in_degree=0 is prohibited
+        It is used in `fit_spline_tree_invariant` to identify the main branch
+        in a neuron and group the collateral branches for later analysis.
+
+        The main branch is defined as the longest possible path connecting the
+        neuron's nodes, in terms of spatial distance. An example is provided in
+        the following figure:
+
+        .. figure:: https://raw.githubusercontent.com/neurodata/brainlit/develop/docs/images/find_main_branch.png
+            :scale: 25%
+            :alt: find_main_branch example
+
+            Graphic example of `find_main_branch()` functionality.
+
+        Arguments:
+            tree: nx.DiGraph, a directed graph.
+                It is the result of nx.algorithms.traversal.depth_first_search.dfs_tree()
+                which returns an oriented tree constructed from a depth-first search of
+                the neuron
+            starting_length: float, optional.
+                It is the spatial distance between the root of the neuron (i.e `self.root`) and
+                the root of the current main branch. It must be real-valued, non-negative.
+                It is defaulted to `0` for the first main branch, that starts from the root of
+                the neuron.
 
         Returns:
-            path (list): a list of nodes
-            other_trees (list): directed graphs of children trees
+            main_branch: list, a list of nodes.
+            collateral_branches: list, directed graphs of children trees.
         """
 
-        
-        other_trees = []
+        # Initialize the list of collateral branches
+        collateral_branches = []
+        # If there is only one node in the tree, that is the main branch
         if len(tree.nodes) == 1:
-            path = tree.nodes
+            main_branch = tree.nodes
         else:
-            roots = [n for n, d in tree.in_degree() if d == 0]
-
-            if len(roots) > 1:
-                raise ValueError("More than one node with in degree 0")
-            else:
-                root = roots[0]
-
+            # Find the root of the tree.
+            # A node is a candidate to be the root if it does not
+            # have any edges pointing to it (i.e. in_degree == 0)
+            roots = [node for node, degree in tree.in_degree() if degree == 0]
+            root = roots[0]
+            # Find the leaves of the tree.
+            # A node is a leaf if it has only one edge pointing
+            # to it (i.e. in_degree == 1), and no edges pointing
+            # out of it (i.e. out_degree == 0)
             leaves = [
-                n
-                for n in tree.nodes()
-                if tree.out_degree(n) == 0 and tree.in_degree(n) == 1
+                node
+                for node in tree.nodes()
+                if tree.out_degree(node) == 0 and tree.in_degree(node) == 1
             ]
-
+            # For each leaf, compute the shortest path to reach it
             shortest_paths = [
                 nx.algorithms.shortest_paths.generic.shortest_path(
                     tree, source=root, target=l
                 )
                 for l in leaves
             ]
-
-            distances = [self.path_length(path) for path in shortest_paths]
-            shortest_idx = np.argmax(distances)
-
-            leaf = leaves[shortest_idx]
-
-            path = nx.algorithms.shortest_paths.generic.shortest_path(
-                tree, source=root, target=leaf
+            # Compute the lengths of the paths
+            lengths = [self.path_length(path) for path in shortest_paths]
+            # Find the longest path
+            longest_path_idx = np.argmax(lengths)
+            furthest_leaf = leaves[longest_path_idx]
+            # Find the main branch
+            main_branch = nx.algorithms.shortest_paths.generic.shortest_path(
+                tree, source=root, target=furthest_leaf
             )
 
-            length = starting_length
-            for i, node in enumerate(path):
+            # Here, we walk on the main branch to find
+            # the collateral branches
+            for i, node in enumerate(main_branch):
+                # Increase starting_length by the size of
+                # the step on the main branch
                 if i > 0:
                     loc1 = self.nodes[node]["loc"]
-                    loc2 = self.nodes[path[i - 1]]["loc"]
-                    length = length + np.linalg.norm(loc1 - loc2)
-
+                    loc2 = self.nodes[main_branch[i - 1]]["loc"]
+                    starting_length += np.linalg.norm(loc2 - loc1)
+                # Find all successors of the current node on
+                # the main branch. A node m is a successor of the node
+                # n if there is a directed edge that goes from n to m
                 children = tree.successors(node)
                 for child in children:
-                    if child != path[i + 1]:
-                        other_trees.append(
+                    # If the successor is not on the main branch, then
+                    # we found a branching point of the neuron
+                    if child != main_branch[i + 1]:
+                        # Explore the newly-found branch and
+                        # append it to the list of collateral branches
+                        collateral_branches.append(
                             (
                                 nx.algorithms.traversal.depth_first_search.dfs_tree(
                                     tree, source=child
                                 ),
                                 node,
-                                length,
+                                starting_length,
                             )
                         )
-
-        path = list(path)
-
-        return (path, other_trees)
+        return list(main_branch), collateral_branches
 
     def path_length(self, path):
         """compute the distance between nodes along the path
 
         Args:
             path (list): list of nodes
-        
+
         Raises:
             ValueError: nodes should be defined under loc attribute
             TypeError: loc should be of numpy.ndarray
@@ -265,13 +299,13 @@ class GeometricGraph(nx.Graph):
         Returns:
             length (int): length between nodes
         """
-                
+
         length = 0
-        
+
         for i, node in enumerate(path):
             if i > 0:
                 # check if loc is defined and of numpy.ndarray class
-                hasloc=self.nodes[node].get("loc")
+                hasloc = self.nodes[node].get("loc")
                 if hasloc is None:
                     raise ValueError("Nodes are not defined under loc attribute")
                 elif type(hasloc) is not np.ndarray:
@@ -280,8 +314,9 @@ class GeometricGraph(nx.Graph):
                     raise ValueError("loc is not 3-dimensional")
                 else:
                     length = length + np.linalg.norm(
-                    self.nodes[node]["loc"] - self.nodes[path[i - 1]]["loc"]
+                        self.nodes[node]["loc"] - self.nodes[path[i - 1]]["loc"]
                     )
         return length
+
 
 # %%

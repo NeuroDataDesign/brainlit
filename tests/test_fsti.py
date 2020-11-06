@@ -23,7 +23,9 @@ def test_fit_spline_tree_invariant_bad_input():
     neuron_wrong_loc_type = GeometricGraph()
     neuron_wrong_loc_type.add_node(1, loc={})
     neuron_wrong_loc_type.add_node(2, loc=np.array([100, 100, 200]))
-    with pytest.raises(TypeError, match=r"{} should be <class 'numpy.ndarray'>, not <class 'dict'>."):
+    with pytest.raises(
+        TypeError, match=r"{} should be <class 'numpy.ndarray'>, not <class 'dict'>."
+    ):
         neuron_wrong_loc_type.fit_spline_tree_invariant()
 
     # test 'loc' attribute must be a flat array
@@ -39,12 +41,15 @@ def test_fit_spline_tree_invariant_bad_input():
     neuron_empty_loc.add_node(2, loc=np.array([100, 100, 200]))
     with pytest.raises(ValueError, match=r"nodes cannot have empty 'loc' attributes"):
         neuron_empty_loc.fit_spline_tree_invariant()
-    
+
     # test 'loc' attribute must be real-valued
     neuron_non_real_valued_loc = GeometricGraph()
-    neuron_non_real_valued_loc.add_node(1, loc=np.array(['a']))
+    neuron_non_real_valued_loc.add_node(1, loc=np.array(["a"]))
     neuron_non_real_valued_loc.add_node(2, loc=np.array([100, 100, 200]))
-    with pytest.raises(TypeError, match=r"\['a'\] elements should be \(<class 'numpy.integer'>, <class 'float'>\)."):
+    with pytest.raises(
+        TypeError,
+        match=r"\['a'\] elements should be \(<class 'numpy.integer'>, <class 'float'>\).",
+    ):
         neuron_non_real_valued_loc.fit_spline_tree_invariant()
 
     # test 'loc' attribute must have 3 coordinates
@@ -60,14 +65,16 @@ def test_fit_spline_tree_invariant_bad_input():
     neuron_duplicate_loc.add_node(2, loc=np.array([100, 100, 200]))
     with pytest.raises(ValueError, match=r"there are duplicate nodes"):
         neuron_duplicate_loc.fit_spline_tree_invariant()
-    
+
     # test edges must be a valid cover of the graph
     neuron_no_edges = GeometricGraph()
     neuron_no_edges.add_node(1, loc=np.array([100, 100, 200]))
     neuron_no_edges.add_node(2, loc=np.array([200, 200, 400]))
-    with pytest.raises(ValueError, match=r"the edges are not a valid cover of the graph"):
+    with pytest.raises(
+        ValueError, match=r"the edges are not a valid cover of the graph"
+    ):
         neuron_no_edges.fit_spline_tree_invariant()
-    
+
     # test there cannot be undirected cycles in the graph
     neuron_cycles = GeometricGraph()
     neuron_cycles.add_node(1, loc=np.array([100, 100, 200]))

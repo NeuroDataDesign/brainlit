@@ -1,10 +1,16 @@
-#%%
 import numpy as np
 from scipy.interpolate import splprep
 import math
 import warnings
 import networkx as nx
 import itertools
+from brainlit.utils.util import (
+    check_type,
+    check_size,
+    check_precomputed,
+    check_iterable_type,
+    check_iterable_nonnegative,
+)
 
 """
 Function definitions
@@ -57,26 +63,36 @@ class GeometricGraph(nx.Graph):
             spline_tree (DiGraph): a parent tree with the longest path in the directed graph
         """
 
-        # check repeated locations are assigned to differnet nodes
-        LOC = []
-        for noNum in list(self.nodes):
-            LOC.append(np.ndarray.tolist(self.nodes[noNum]["loc"]))
+        # check integrity of 'loc' attributes in the neuron
+        if any([self.nodes[node].get("loc") is None for node in self.nodes]):
+            raise KeyError("some nodes are missing the 'loc' attribute")
+        for node in self.nodes:
+            check_type(self.nodes[node].get("loc"), np.ndarray)
+        if any([self.nodes[node].get("loc").ndim != 1 for node in self.nodes]):
+            raise ValueError("nodes must be flat arrays")
+        if any([len(self.nodes[node].get("loc")) == 0 for node in self.nodes]):
+            raise ValueError("nodes cannot have empty 'loc' attributes")
+        for node in self.nodes:
+            check_iterable_type(self.nodes[node].get("loc"), (np.integer, np.float))
+        if any([len(self.nodes[node].get("loc")) != 3 for node in self.nodes]):
+            raise ValueError("'loc' attributes must contain 3 coordinates")
 
-        LOC.sort()
-        sLOC = list(LOC for LOC, _ in itertools.groupby(LOC))
+        # check there are no duplicate nodes
+        LOCs = [np.ndarray.tolist(self.nodes[node]["loc"]) for node in self.nodes]
+        LOCs.sort()
+        unique_LOCs = list(LOC for LOC, _ in itertools.groupby(LOCs))
+        if len(LOCs) != len(unique_LOCs):
+            raise ValueError("there are duplicate nodes")
 
-        if len(LOC) != len(sLOC):
-            raise ValueError("Duplicate node locations are found")
-
-        # check if the graph is edge-covering and a tree
-        if nx.algorithms.is_edge_cover(self, self.edges) == False:
-            raise ValueError("The graph is not edge-covering")
-        elif nx.algorithms.tree.recognition.is_forest(self) == False:
-            raise ValueError("The graph is not a tree for having undirected cycle(s).")
-        elif nx.algorithms.tree.recognition.is_tree(self) == False:
-            raise ValueError(
-                "The geometric graph is not a tree for having disconnected segment(s)."
-            )
+        # check the graph is edge-covering
+        if not nx.algorithms.is_edge_cover(self, self.edges):
+            raise ValueError("the edges are not a valid cover of the graph")
+        # check there are no undirected cycles in the graph
+        if not nx.algorithms.tree.recognition.is_forest(self):
+            raise ValueError("the graph contains undirected cycles")
+        # check there are no disconnected segments
+        if not nx.algorithms.tree.recognition.is_tree(self):
+            raise ValueError("the graph contains disconnected segments")
 
         spline_tree = nx.DiGraph()
         curr_spline_num = 0
@@ -111,11 +127,11 @@ class GeometricGraph(nx.Graph):
         for node in spline_tree.nodes:
             main_branch = spline_tree.nodes[node]["path"]
 
-            spline_tree.nodes[node]["spline"] = self.fit_spline_path(main_branch)
+            spline_tree.nodes[node]["spline"] = self.__fit_spline_path(main_branch)
 
         return spline_tree
 
-    def fit_spline_path(self, path):
+    def __fit_spline_path(self, path):
         """calculate the knots, B-spline coefficients, and the degree of the spline according to the path
 
         Args:
@@ -162,11 +178,11 @@ class GeometricGraph(nx.Graph):
         k = np.amin([m - 1, 5])
         tck, u = splprep([x[:, 0], x[:, 1], x[:, 2]], u=diffs, k=k)
 
-        self.check_multiplicity(tck[0])
+        self.__check_multiplicity(tck[0])
 
         return tck, u
 
-    def check_multiplicity(self, t):
+    def __check_multiplicity(self, t):
         """check multiplicity
 
         Args:
@@ -206,7 +222,7 @@ class GeometricGraph(nx.Graph):
             tree: nx.DiGraph, a directed graph.
                 It is the result of nx.algorithms.traversal.depth_first_search.dfs_tree()
                 which returns an oriented tree constructed from a depth-first search of
-                the neuron
+                the neuron.
             starting_length: float, optional.
                 It is the spatial distance between the root of the neuron (i.e `self.root`) and
                 the root of the current main branch. It must be real-valued, non-negative.
@@ -246,7 +262,7 @@ class GeometricGraph(nx.Graph):
                 for l in leaves
             ]
             # Compute the lengths of the paths
-            lengths = [self.path_length(path) for path in shortest_paths]
+            lengths = [self.__path_length(path) for path in shortest_paths]
             # Find the longest path
             longest_path_idx = np.argmax(lengths)
             furthest_leaf = leaves[longest_path_idx]
@@ -285,38 +301,33 @@ class GeometricGraph(nx.Graph):
                         )
         return list(main_branch), collateral_branches
 
-    def path_length(self, path):
-        """compute the distance between nodes along the path
+    def __path_length(self, path):
+        r"""Compute the length of a path.
 
-        Args:
-            path (list): list of nodes
+        Given a path ::math::`p = (r_1, \dots, r_N)`, where
+        ::math::`r_k = [x_k, y_k, z_k], k = 1, \dots, N`, the length
+        `l` of a path is computed as the sum of the lengths of the
+        edges of the path. We can write:
 
-        Raises:
-            ValueError: nodes should be defined under loc attribute
-            TypeError: loc should be of numpy.ndarray
-            ValueError: loc should be 3-dimensional
+        .. math::
+            l = \sum_{k=2}^N \lVert r_k - r_{k-1} \rVert
+
+        Arguments:
+            path: a list of nodes.
+                The integrity of the nodes is checked for at the beginning of
+                `fit_spline_tree_invariant`.
 
         Returns:
-            length (int): length between nodes
+            length: float.
+                It is the length of the path.
         """
 
-        length = 0
-
-        for i, node in enumerate(path):
-            if i > 0:
-                # check if loc is defined and of numpy.ndarray class
-                hasloc = self.nodes[node].get("loc")
-                if hasloc is None:
-                    raise ValueError("Nodes are not defined under loc attribute")
-                elif type(hasloc) is not np.ndarray:
-                    raise TypeError("loc is not a numpy.ndarray")
-                elif len(hasloc) != 3:
-                    raise ValueError("loc is not 3-dimensional")
-                else:
-                    length = length + np.linalg.norm(
-                        self.nodes[node]["loc"] - self.nodes[path[i - 1]]["loc"]
-                    )
+        length = sum(
+            [
+                np.linalg.norm(self.nodes[node]["loc"] - self.nodes[path[i - 1]]["loc"])
+                if i >= 1
+                else 0
+                for i, node in enumerate(path)
+            ]
+        )
         return length
-
-
-# %%
